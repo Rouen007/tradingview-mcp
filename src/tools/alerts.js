@@ -17,6 +17,14 @@ export function registerAlertTools(server) {
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
 
+  server.tool('alert_create_script', 'Create one 1-minute Any alert() function call alert for a Pine indicator', {
+    study_name: z.string().describe('Exact Pine indicator title shown on the chart'),
+    expiration: z.string().optional().describe('Expiration preset; session expires at the current trading session end'),
+  }, async ({ study_name, expiration }) => {
+    try { return jsonResult(await core.createScript({ study_name, expiration: expiration || 'session' })); }
+    catch (err) { return jsonResult({ success: false, error: err.message }, true); }
+  });
+
   server.tool('alert_delete', 'Delete all alerts or open context menu for deletion', {
     delete_all: z.coerce.boolean().optional().describe('Delete all alerts'),
   }, async ({ delete_all }) => {

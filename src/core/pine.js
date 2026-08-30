@@ -11,6 +11,7 @@ const FIND_MONACO = `
     var containers = document.querySelectorAll('.monaco-editor.pine-editor-monaco, .monaco-editor');
     for (var ci = 0; ci < containers.length; ci++) {
       var el = containers[ci];
+      if (!el || el.offsetParent === null) continue;
       var fiberKey;
       for (var i = 0; i < 30; i++) {
         if (!el) break;
@@ -26,7 +27,10 @@ const FIND_MONACO = `
           var env = current.memoizedProps.value.monacoEnv;
           if (env.editor && typeof env.editor.getEditors === 'function') {
             var editors = env.editor.getEditors();
-            if (editors.length > 0) return { editor: editors[0], env: env };
+            for (var ei = 0; ei < editors.length; ei++) {
+              var dom = typeof editors[ei].getDomNode === 'function' ? editors[ei].getDomNode() : null;
+              if (dom && dom.offsetParent !== null) return { editor: editors[ei], env: env };
+            }
           }
         }
         current = current.return;
@@ -443,6 +447,13 @@ export async function smartCompile() {
 
   const buttonClicked = await evaluate(`
     (function() {
+      var direct = Array.from(document.querySelectorAll('[data-qa-id="add-script-to-chart"]'))
+        .find(function(b) { return b.offsetParent !== null && !b.disabled; });
+      if (direct) {
+        var directTitle = direct.getAttribute('title') || 'Add/update script on chart';
+        direct.click();
+        return directTitle;
+      }
       var btns = document.querySelectorAll('button');
       var addBtn = null;
       var updateBtn = null;
@@ -511,28 +522,50 @@ export async function newScript({ type }) {
   if (!editorReady) throw new Error('Could not open Pine Editor.');
 
   const typeMap = { indicator: 'indicator', strategy: 'strategy', library: 'library' };
-  const templates = {
-    indicator: '//@version=6\nindicator("My script")\nplot(close)',
-    strategy: '//@version=6\nstrategy("My strategy", overlay=true)\n',
-    library: '//@version=6\n// @description TODO: add library description here\nlibrary("MyLibrary")\n',
-  };
+  const labelMap = { indicator: 'Indicator', strategy: 'Strategy', library: 'Library' };
+  const selectedType = typeMap[type] || 'indicator';
+  const selectedLabel = labelMap[selectedType];
 
-  const template = templates[type] || templates.indicator;
-
-  // Simply set the source to a new template — this is the most reliable approach
-  const escaped = JSON.stringify(template);
-  const set = await evaluate(`
+  const menuOpened = await evaluate(`
     (function() {
-      var m = ${FIND_MONACO};
-      if (!m) return false;
-      m.editor.setValue(${escaped});
+      var title = Array.from(document.querySelectorAll('[data-qa-id="pine-script-title-button"]'))
+        .find(function(b) { return b.offsetParent !== null; });
+      if (!title) return false;
+      title.click();
       return true;
     })()
   `);
+  if (!menuOpened) throw new Error('Pine script title menu not found.');
+  await new Promise(r => setTimeout(r, 250));
 
-  if (!set) throw new Error('Monaco editor not found. Ensure Pine Editor is open.');
+  const submenuOpened = await evaluate(`
+    (function() {
+      var item = Array.from(document.querySelectorAll('[role="menuitem"]'))
+        .find(function(x) { return x.offsetParent !== null && x.textContent.trim() === 'Create new'; });
+      if (!item) return false;
+      ['mouseenter', 'mouseover', 'mousemove'].forEach(function(name) {
+        item.dispatchEvent(new MouseEvent(name, { bubbles: true, view: window }));
+      });
+      return true;
+    })()
+  `);
+  if (!submenuOpened) throw new Error('Pine Create new menu item not found.');
+  await new Promise(r => setTimeout(r, 350));
 
-  return { success: true, type, action: 'new_script_created', template: typeMap[type] };
+  const created = await evaluate(`
+    (function() {
+      var label = ${JSON.stringify(selectedLabel)};
+      var item = Array.from(document.querySelectorAll('[role="menuitem"]'))
+        .find(function(x) { return x.offsetParent !== null && x.textContent.trim().indexOf(label) === 0; });
+      if (!item) return false;
+      item.click();
+      return true;
+    })()
+  `);
+  if (!created) throw new Error(`Pine ${selectedLabel} template menu item not found.`);
+  await new Promise(r => setTimeout(r, 500));
+
+  return { success: true, type: selectedType, action: 'new_script_created', template: selectedType };
 }
 
 export async function openScript({ name }) {

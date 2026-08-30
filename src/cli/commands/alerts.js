@@ -21,6 +21,19 @@ register('alert', {
         message: opts.message,
       }),
     }],
+    ['create-script', {
+      description: 'Create one Any alert() function call alert for a Pine indicator',
+      options: {
+        expiration: { type: 'string', description: 'Expiration preset (default: session)' },
+      },
+      handler: (opts, positionals) => {
+        if (!positionals[0]) throw new Error('Study name required. Usage: tv alert create-script "My Indicator"');
+        return core.createScript({
+          study_name: positionals.join(' '),
+          expiration: opts.expiration || 'session',
+        });
+      },
+    }],
     ['delete', {
       description: 'Delete alerts',
       options: {
